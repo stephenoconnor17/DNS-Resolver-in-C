@@ -3,8 +3,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <sys/time.h>
 #include <time.h>
+#include <sys/socket.h>
 
+#define DNS_MAX_RESPONSE 512
 #define DNS_HEADER_LEN 12
 #define DNS_MAX_NAME_LEN 255
 #define DNS_QUERY_MAX (DNS_HEADER_LEN + DNS_MAX_NAME_LEN + 4)// 4 FOR QTYPE AND QCLASS
@@ -126,6 +129,7 @@ int main(int argc, char* argv[]){
 	if (n == 0) { fprintf(stderr, "bad name\n"); return 1; }
 	cursor += n;
 
+	//qtype and qclass writes.
 	uint16_t qtype = htons(1);
 	memcpy(buf + cursor, &qtype, sizeof(qtype));
 	cursor += 2;
@@ -134,12 +138,78 @@ int main(int argc, char* argv[]){
 	memcpy(buf + cursor, &qclass, sizeof(qclass));
 	cursor += 2;
 
+	/*
 	//hex print.
-	
 	for (size_t k = 0; k < cursor; k++){
     	printf("%02x ", buf[k]);
 	}
+	*/
+	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+	struct sockaddr_in dest;
+	dest.sin_family = AF_INET;
+	dest.sin_port = htons(53);
+
+	if (inet_pton(AF_INET, "198.41.0.4", &dest.sin_addr) != 1) {
+		fprintf(stderr, "bad address\n");
+		return 1;
+	}
+
+	struct timeval tv;
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+
+	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+	ssize_t bytesSent = sendto(sockfd, buf, cursor, 0, (struct sockaddr*)&dest,sizeof(dest));
+	if(bytesSent < 0){
+		perror("sendto");
+		return 1;
+	}
+
+	uint8_t replyBuf[DNS_MAX_RESPONSE];
+	struct sockaddr_in src;
+	socklen_t srcLen = sizeof(src);
+	ssize_t bytesReceived = recvfrom(sockfd, replyBuf, sizeof(replyBuf), 0,(struct sockaddr*)&src, &srcLen);
+	if (bytesReceived < 0) {
+    	perror("recvfrom");
+    	return 1;
+	}
+
+	if(bytesReceived < DNS_HEADER_LEN){
+		fprintf(stderr, "runt packet: %zd bytes\n", bytesReceived);
+		return 1;
+	}
+
+	dns_header responseHeader;
+	memcpy(&responseHeader, replyBuf, DNS_HEADER_LEN);
+
+	if(ntohs(responseHeader.id) != id){
+		fprintf(stderr, "improper id packet: %zd bytes\n", bytesReceived);
+		return 1;
+	}
 	
+	if(!DNS_QR(ntohs(responseHeader.flags_and_codes))){
+		fprintf(stderr, "not a reply packet: %zd bytes\n", bytesReceived);
+		return 1;
+	}
+
+	if(DNS_RCODE(ntohs(responseHeader.flags_and_codes)) != 0){
+		fprintf(stderr, "rcode != NOERROR: %zd bytes\n", bytesReceived);
+		return 1;
+	}
+
+	if(DNS_TC(ntohs(responseHeader.flags_and_codes))){
+		//TCP FALLBACK Occurs here.
+		fprintf(stderr, "truncated packet: %zd bytes\n", bytesReceived);
+		return 1;
+	}
+
+	if((size_t)bytesReceived < cursor || memcmp(replyBuf + DNS_HEADER_LEN, buf + DNS_HEADER_LEN, cursor - DNS_HEADER_LEN) != 0){
+		fprintf(stderr, "question mismatch\n");
+		return 1;
+	}
+
 
 	printf("\n");
 
