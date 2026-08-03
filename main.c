@@ -1,90 +1,7 @@
+#include "dns.h"
 #include <stdio.h>
-#include <stdint.h>
-#include <string.h>
 #include <stdlib.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
 #include <time.h>
-#include <sys/socket.h>
-
-#define DNS_MAX_RESPONSE 512
-#define DNS_HEADER_LEN 12
-#define DNS_MAX_NAME_LEN 255
-#define DNS_QUERY_MAX (DNS_HEADER_LEN + DNS_MAX_NAME_LEN + 4)// 4 FOR QTYPE AND QCLASS
-
-//x << 15 - n gives us position 15 - n with length x
-#define DNS_QR_MASK (1 << 15)
-#define DNS_OPCODE_MASK (0xF << 11)
-#define DNS_AA_MASK (1 << 10)
-#define DNS_TC_MASK (1 << 9)
-#define DNS_RD_MASK (1 << 8)
-#define DNS_RA_MASK (1 << 7)
-#define DNS_Z_MASK (0x7 << 4)
-#define DNS_RCODE_MASK (0xF)
-
-#define DNS_QR(f) (((f) & DNS_QR_MASK) >> 15)
-#define DNS_OPCODE(f) (((f) & DNS_OPCODE_MASK) >> 11)
-#define DNS_AA(f) (((f) & DNS_AA_MASK) >> 10)
-#define DNS_TC(f) (((f) & DNS_TC_MASK) >> 9)
-#define DNS_RD(f) (((f) & DNS_RD_MASK) >> 8)
-#define DNS_RA(f) (((f) & DNS_RA_MASK) >> 7)
-#define DNS_Z(f) (((f) & DNS_Z_MASK) >> 4)
-#define DNS_RCODE(f) ((f) & DNS_RCODE_MASK)
-
-//derived from rfc 1035.
-typedef struct dns_header_t{
-	uint16_t id;
-	uint16_t flags_and_codes; // & with masks for value.
-	uint16_t qdcount;
-	uint16_t ancount;
-	uint16_t nscount;
-	uint16_t arcount;
-}dns_header;
-
-_Static_assert(sizeof(dns_header) == DNS_HEADER_LEN, "dns_header struct is not 12 bytes long");
-
-size_t encode_name(const char* name, uint8_t* out){
-	size_t len = strlen(name);
-	if(len + 2 > DNS_MAX_NAME_LEN) return 0; // + 2 for starting and end length byte.
-
-	int j = 0;
-	int currentLength = 0;
-	int longestLength = 0;
-	while(*(name + j) != '\0' && longestLength < 64){
-		if(*(name + j) != '.'){
-			currentLength++;
-		}else{
-			if(currentLength > longestLength) longestLength = currentLength;
-			currentLength = 0;
-		}
-
-		j++;
-		if(*(name + j) == '\0')longestLength = currentLength; // guards against label with no dots at all.
-	}
-
-	if(longestLength > 63) return 0;
-
-	uint8_t* lengthLocation = out;
-
-	uint8_t count = 0;
-	int i = 0;
-
-	while(*(name + i) != '\0'){
-		if(*(name + i) != '.'){
-			*(out + i + 1) = *(name + i);
-			count++;
-		}else{
-			*(lengthLocation) = count;
-			lengthLocation = (out + i + 1);
-			count = 0;
-		}
-		i++;
-	}
-
-	*(lengthLocation) = count;
-	*(out + i + 1) = 0x0; //end of name must be 0x0.
-	return i + 2; //length of string, starting length byte and terminating length byte.
-}
 
 int main(int argc, char* argv[]){
 	if (argc < 2) {
@@ -93,50 +10,15 @@ int main(int argc, char* argv[]){
 	}
 
 	srand(time(NULL));
-	size_t cursor = 0;
 	uint8_t buf[DNS_QUERY_MAX];
 
-	dns_header header;
 	uint16_t id = rand() & 0xFFFF; //important to save for once reply comes back.
 	//not trustworthy security wise but fine for this little project.
-	header.id = htons(id);
-
-	uint16_t flags = 0;
-	//if flags wasnt 0 clearing would be in order.
-
-	//these are useless but just practice for me.
-
-	flags &= ~DNS_QR_MASK;	//qr 0
-	flags |= (0 & 0xF) << 11; //opcode 0;
-	flags &= ~DNS_AA_MASK; //aa 0
-	flags &= ~DNS_TC_MASK; //tc 0
-	flags &= ~DNS_RD_MASK; //rd 0
-	flags &= ~DNS_RA_MASK; //ra 0
-	flags |= (0 & 0x7) << 4; //z 0
-	flags |= (0 & 0xF); //rcode 0
 	
-	header.flags_and_codes = flags;
-	header.qdcount = htons(0x1);
-	header.ancount = 0;
-	header.nscount = 0;
-	header.arcount = 0;
-
-	memcpy(buf + cursor, &header, DNS_HEADER_LEN);//write the header.
-	cursor += DNS_HEADER_LEN;
-
-	//write the name
-	size_t n = encode_name(argv[1], buf + cursor);
-	if (n == 0) { fprintf(stderr, "bad name\n"); return 1; }
-	cursor += n;
-
-	//qtype and qclass writes.
-	uint16_t qtype = htons(1);
-	memcpy(buf + cursor, &qtype, sizeof(qtype));
-	cursor += 2;
-
-	uint16_t qclass = htons(1);
-	memcpy(buf + cursor, &qclass, sizeof(qclass));
-	cursor += 2;
+	int sockfd = dns_socket(5);
+	
+	//build query
+	size_t j = build_query(argv[1], buf, id);
 
 	/*
 	//hex print.
@@ -144,73 +26,10 @@ int main(int argc, char* argv[]){
     	printf("%02x ", buf[k]);
 	}
 	*/
-	int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-
-	struct sockaddr_in dest;
-	dest.sin_family = AF_INET;
-	dest.sin_port = htons(53);
-
-	if (inet_pton(AF_INET, "198.41.0.4", &dest.sin_addr) != 1) {
-		fprintf(stderr, "bad address\n");
-		return 1;
-	}
-
-	struct timeval tv;
-	tv.tv_sec = 5;
-	tv.tv_usec = 0;
-
-	setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-	ssize_t bytesSent = sendto(sockfd, buf, cursor, 0, (struct sockaddr*)&dest,sizeof(dest));
-	if(bytesSent < 0){
-		perror("sendto");
-		return 1;
-	}
-
 	uint8_t replyBuf[DNS_MAX_RESPONSE];
-	struct sockaddr_in src;
-	socklen_t srcLen = sizeof(src);
-	ssize_t bytesReceived = recvfrom(sockfd, replyBuf, sizeof(replyBuf), 0,(struct sockaddr*)&src, &srcLen);
-	if (bytesReceived < 0) {
-    	perror("recvfrom");
-    	return 1;
-	}
 
-	if(bytesReceived < DNS_HEADER_LEN){
-		fprintf(stderr, "runt packet: %zd bytes\n", bytesReceived);
-		return 1;
-	}
-
-	dns_header responseHeader;
-	memcpy(&responseHeader, replyBuf, DNS_HEADER_LEN);
-
-	if(ntohs(responseHeader.id) != id){
-		fprintf(stderr, "improper id packet: %zd bytes\n", bytesReceived);
-		return 1;
-	}
-	
-	if(!DNS_QR(ntohs(responseHeader.flags_and_codes))){
-		fprintf(stderr, "not a reply packet: %zd bytes\n", bytesReceived);
-		return 1;
-	}
-
-	if(DNS_RCODE(ntohs(responseHeader.flags_and_codes)) != 0){
-		fprintf(stderr, "rcode != NOERROR: %zd bytes\n", bytesReceived);
-		return 1;
-	}
-
-	if(DNS_TC(ntohs(responseHeader.flags_and_codes))){
-		//TCP FALLBACK Occurs here.
-		fprintf(stderr, "truncated packet: %zd bytes\n", bytesReceived);
-		return 1;
-	}
-
-	if((size_t)bytesReceived < cursor || memcmp(replyBuf + DNS_HEADER_LEN, buf + DNS_HEADER_LEN, cursor - DNS_HEADER_LEN) != 0){
-		fprintf(stderr, "question mismatch\n");
-		return 1;
-	}
-
-
+	ssize_t responseSize = send_query(sockfd, "198.41.0.4", buf, j, replyBuf, j);
+	int validReply = validate_reply(replyBuf, responseSize, buf, j, id);
 	printf("\n");
 
 	return 0;
