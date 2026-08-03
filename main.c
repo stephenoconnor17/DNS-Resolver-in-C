@@ -16,20 +16,22 @@ int main(int argc, char* argv[]){
 	//not trustworthy security wise but fine for this little project.
 	
 	int sockfd = dns_socket(5);
-	
-	//build query
-	size_t j = build_query(argv[1], buf, id);
+	if(sockfd < 0) return 1;
 
-	/*
-	//hex print.
-	for (size_t k = 0; k < cursor; k++){
-    	printf("%02x ", buf[k]);
-	}
-	*/
+	//build query
+	size_t qlen = build_query(argv[1], buf, id);
+	if(qlen == 0) return 1;
+
 	uint8_t replyBuf[DNS_MAX_RESPONSE];
 
-	ssize_t responseSize = send_query(sockfd, "198.41.0.4", buf, j, replyBuf, j);
-	int validReply = validate_reply(replyBuf, responseSize, buf, j, id);
+	ssize_t responseSize = send_query(sockfd, "198.41.0.4", buf, qlen, replyBuf, sizeof(replyBuf));
+	if(responseSize < 0) return 1;
+
+	int validReply = validate_reply(replyBuf, responseSize, buf, qlen, id);
+	if(validReply != 0) return 1;
+
+	printf("reply: %zd bytes\n", responseSize);
+
 	printf("\n");
 
 	return 0;

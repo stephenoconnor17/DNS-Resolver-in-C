@@ -152,6 +152,9 @@ int validate_reply(const uint8_t* reply, ssize_t n, const uint8_t* query, size_t
 	dns_header responseHeader;
 	memcpy(&responseHeader, reply, DNS_HEADER_LEN);
 
+	//DEBUG HEX PRINT
+	printf("flags: %04x\n", ntohs(responseHeader.flags_and_codes));
+
 	if(ntohs(responseHeader.id) != id){
 		fprintf(stderr, "improper id packet: %zd bytes\n", bytesReceived);
 		return 1;
