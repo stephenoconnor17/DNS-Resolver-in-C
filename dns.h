@@ -39,6 +39,15 @@ typedef struct dns_header_t{
 	uint16_t arcount;
 }dns_header;
 
+typedef struct dns_record_t{
+	char name[256];
+	uint16_t type;
+	uint16_t class;
+	uint32_t ttl;
+	uint16_t rdlength;
+	size_t rDataOffset;
+}dns_record;
+
 _Static_assert(sizeof(dns_header) == DNS_HEADER_LEN, "dns_header struct is not 12 bytes long");
 
 size_t encode_name(const char* name, uint8_t* out);

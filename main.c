@@ -32,6 +32,18 @@ int main(int argc, char* argv[]){
 
 	printf("reply: %zd bytes\n", responseSize);
 
+	size_t cursor = DNS_HEADER_LEN;
+	ssize_t r = skip_name(replyBuf, (size_t)responseSize, cursor);
+
+	if(r < 0) return 1;
+
+	cursor = r;
+
+	if(cursor + 4 > (size_t)responseSize) return 1;
+
+	cursor += 4;
+
+	printf("records start at offset %zu\n", cursor);
 	printf("\n");
 
 	return 0;
