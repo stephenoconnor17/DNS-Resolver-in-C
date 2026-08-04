@@ -46,5 +46,6 @@ int dns_socket(int timeoutSeconds);
 size_t build_query(const char* name, uint8_t* buf, uint16_t id);
 ssize_t send_query(int sockfd, const char* server, const uint8_t* query, size_t qlen, uint8_t* reply, size_t replyCap);
 int validate_reply(const uint8_t* reply, ssize_t n, const uint8_t* query, size_t qlen, uint16_t id);
+ssize_t skip_name(const uint8_t *buf, size_t len, size_t cursor);
 
 #endif

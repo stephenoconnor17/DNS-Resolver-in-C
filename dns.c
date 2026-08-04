@@ -173,7 +173,8 @@ int validate_reply(const uint8_t* reply, ssize_t n, const uint8_t* query, size_t
 	if(DNS_TC(ntohs(responseHeader.flags_and_codes))){
 		//TCP FALLBACK Occurs here.
 		fprintf(stderr, "truncated packet: %zd bytes\n", bytesReceived);
-		return 1;
+		//return 1; //warning for now.
+		return 0;
 	}
 
 	if((size_t)bytesReceived < qlen || memcmp(reply + DNS_HEADER_LEN, query + DNS_HEADER_LEN, qlen - DNS_HEADER_LEN) != 0){
@@ -182,4 +183,25 @@ int validate_reply(const uint8_t* reply, ssize_t n, const uint8_t* query, size_t
 	}
 
 	return 0;
+}
+
+ssize_t skip_name(const uint8_t *buf, size_t len, size_t cursor){
+	while(1){
+		if(cursor >= len) return -1;
+
+		uint8_t labelLen = buf[cursor];
+
+		if(labelLen == 0x00){//name terminator.
+			cursor += 1;
+			return cursor;
+		}else if((labelLen & (0xC0)) == 0xC0){//pointer
+			if(cursor + 2 > len) return -1;
+			cursor += 2;
+			return cursor;
+		}else{
+			if(cursor + 1 + labelLen > len) return -1;
+			cursor += 1 + labelLen;
+			continue;
+		}
+	}
 }
