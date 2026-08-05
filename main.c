@@ -46,5 +46,11 @@ int main(int argc, char* argv[]){
 	printf("records start at offset %zu\n", cursor);
 	printf("\n");
 
+	/*
+	char nameBuf[256];
+	ssize_t rr = decode_name(replyBuf, responseSize, DNS_HEADER_LEN, nameBuf, sizeof(nameBuf));
+	printf("decoded: %s, next offset %zd\n", nameBuf, rr);
+	*/
+
 	return 0;
 }

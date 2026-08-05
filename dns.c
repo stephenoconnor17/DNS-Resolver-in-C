@@ -205,3 +205,49 @@ ssize_t skip_name(const uint8_t *buf, size_t len, size_t cursor){
 		}
 	}
 }
+ssize_t decode_name(const uint8_t* buf, size_t len, size_t cursor, char* out, size_t outCap){
+	size_t readPos = cursor;
+	ssize_t next = -1;
+
+	size_t written = 0;
+	int jumps = 0;
+
+	while(1){
+		if(readPos >= len) return -1;
+
+		if((buf[readPos] & (0xC0)) == 0xC0){
+			if(readPos + 2 > len) return -1;
+			if(next < 0) next = readPos + 2;
+
+			size_t offset =  ((buf[readPos] & 0x3F) << 8) | buf[readPos + 1];
+
+			if(offset >= len) return -1;
+			readPos = offset;
+
+			if(++jumps > 20) return -1;
+		}else if(buf[readPos] == 0x00){
+			if(written + 1 >= outCap) return -1;
+			out[written] = '\0';
+
+			if(next >= 0){
+				return next;
+			}else{
+				return (ssize_t) readPos + 1;
+			}
+		}else{
+			if(buf[readPos] + 1 + readPos > len) return -1;
+			size_t n = (size_t)buf[readPos++];
+
+			if(written + 1 >= outCap) return -1;
+			if (written > 0) out[written++] = '.';
+
+			for(size_t i = 0; i < n; i++){
+				if(written + 1 >= outCap) return -1;
+				if(readPos >= len) return -1;
+				out[written++] = (char)buf[readPos++];
+			}
+		}		
+	}
+
+
+}
