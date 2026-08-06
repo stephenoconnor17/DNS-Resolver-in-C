@@ -224,7 +224,7 @@ ssize_t decode_name(const uint8_t* buf, size_t len, size_t cursor, char* out, si
 			if(offset >= len) return -1;
 			readPos = offset;
 
-			if(++jumps > 20) return -1;
+			if(++jumps > 20) return -1; // stop infinite recursion, ddos?!
 		}else if(buf[readPos] == 0x00){
 			if(written + 1 >= outCap) return -1;
 			out[written] = '\0';
@@ -248,6 +248,61 @@ ssize_t decode_name(const uint8_t* buf, size_t len, size_t cursor, char* out, si
 			}
 		}		
 	}
+}
 
+ssize_t parse_header(const uint8_t *buf, size_t len, dns_header *out){
+	if(len < DNS_HEADER_LEN) return -1;
+
+	memcpy(out, buf, DNS_HEADER_LEN);
+
+	out->id = ntohs(out->id);
+	out->flags_and_codes = ntohs(out->flags_and_codes);
+	out->qdcount = ntohs(out->qdcount);
+	out->ancount = ntohs(out->ancount);
+	out->nscount = ntohs(out->nscount);
+	out->arcount = ntohs(out->arcount);
+
+	return (size_t)DNS_HEADER_LEN;
+}
+
+ssize_t parse_record(const uint8_t* buf, size_t len, size_t cursor, dns_record* out){
+	//we will get locally, and assign the ntohs/nothl to the out record.
+	size_t localCursor = cursor;
+
+	ssize_t nameOffset = decode_name(buf, len, localCursor, out->name, sizeof(out->name));
+	if(nameOffset < 0) return -1;
+	localCursor = (size_t) nameOffset;
+
+	if(localCursor + 10 > len) return -1;
+
+	uint16_t type;
+	memcpy(&type, buf + localCursor, 2);
+	out->type = ntohs(type);
+	localCursor += 2;
+
+	uint16_t rclass;
+	memcpy(&rclass, buf + localCursor, 2);
+	out->rclass = ntohs(rclass);
+	localCursor += 2;
+
+	uint32_t ttl;
+	memcpy(&ttl, buf + localCursor, 4);
+	out->ttl = ntohl(ttl);
+	localCursor += 4;
+
+	uint16_t rdlength;
+	memcpy(&rdlength, buf + localCursor, 2);
+	out->rdlength = ntohs(rdlength);
+	localCursor += 2;
+
+	out->rDataOffset = localCursor;
+
+	if(localCursor + out->rdlength > len) return -1;
+	localCursor += out->rdlength;
+	
+	return (ssize_t)localCursor;
+}
+
+ssize_t parse_records(const uint8_t* buf, size_t len, size_t cursor, dns_record* out){
 
 }

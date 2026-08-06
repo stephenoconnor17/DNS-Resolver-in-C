@@ -8,6 +8,7 @@
 #define DNS_MAX_RESPONSE 512
 #define DNS_HEADER_LEN 12
 #define DNS_MAX_NAME_LEN 255
+#define DNS_NAME_BUF (DNS_MAX_NAME_LEN + 1) // 255 + null terminator
 #define DNS_QUERY_MAX (DNS_HEADER_LEN + DNS_MAX_NAME_LEN + 4)// 4 FOR QTYPE AND QCLASS
 
 //x << 15 - n gives us position 15 - n with length x
@@ -40,9 +41,9 @@ typedef struct dns_header_t{
 }dns_header;
 
 typedef struct dns_record_t{
-	char name[256];
+	char name[DNS_NAME_BUF];
 	uint16_t type;
-	uint16_t class;
+	uint16_t rclass;
 	uint32_t ttl;
 	uint16_t rdlength;
 	size_t rDataOffset;
@@ -57,5 +58,9 @@ ssize_t send_query(int sockfd, const char* server, const uint8_t* query, size_t 
 int validate_reply(const uint8_t* reply, ssize_t n, const uint8_t* query, size_t qlen, uint16_t id);
 ssize_t skip_name(const uint8_t *buf, size_t len, size_t cursor);
 ssize_t decode_name(const uint8_t* buf, size_t len, size_t cursor, char* out, size_t outCap);
+ssize_t parse_header(const uint8_t *buf, size_t len, dns_header *out);
+ssize_t parse_record(const uint8_t* buf, size_t len, size_t cursor, dns_record* out);
+ssize_t parse_records(const uint8_t* buf, size_t len, size_t cursor, dns_record* out);
+
 
 #endif
