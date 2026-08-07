@@ -4,6 +4,7 @@
 #include <time.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 int main(int argc, char* argv[]){
 	if (argc < 2) {
@@ -54,15 +55,21 @@ int main(int argc, char* argv[]){
 
 	uint32_t recordAmount = rh.ancount + rh.arcount + rh.nscount;
 	if(recordAmount > 100) return 1;
-	//dns_* records = malloc(sizeof(dns_record) * recordAmount);
-	//if(records == NULL) return 1;
 
+	dns_ns* records = malloc(sizeof(dns_ns) * 32);
+	if(records == NULL) return 1;
 
+	int validPairs = parse_records(replyBuf, sizeof(replyBuf), cursor, records, 32, (int)recordAmount);
+
+	for(int i = 0; i < validPairs; i++){
+		dns_ns rec = records[i];
+		printf("name : %s address : %s\n", rec.name, rec.addr);
+	}
 	/*
 	dns_record rec;
 	ssize_t next = parse_record(replyBuf, responseSize, 28, &rec);
 	printf("name=%s type=%u class=%u ttl=%u rdlen=%u next=%zd\n", rec.name, rec.type, rec.rclass, rec.ttl, rec.rdlength, next);
-	/*
+	
 	char nameBuf[256];
 	ssize_t rr = decode_name(replyBuf, responseSize, DNS_HEADER_LEN, nameBuf, sizeof(nameBuf));
 	printf("decoded: %s, next offset %zd\n", nameBuf, rr);

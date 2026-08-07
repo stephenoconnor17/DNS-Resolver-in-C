@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <arpa/inet.h>
 
 #define DNS_MAX_RESPONSE 512
 #define DNS_HEADER_LEN 12
@@ -49,6 +50,11 @@ typedef struct dns_record_t{
 	size_t rDataOffset;
 }dns_record;
 
+typedef struct dns_ns_t{
+	char name[DNS_NAME_BUF];
+	char addr[INET_ADDRSTRLEN];
+}dns_ns;
+
 _Static_assert(sizeof(dns_header) == DNS_HEADER_LEN, "dns_header struct is not 12 bytes long");
 
 size_t encode_name(const char* name, uint8_t* out);
@@ -60,7 +66,7 @@ ssize_t skip_name(const uint8_t *buf, size_t len, size_t cursor);
 ssize_t decode_name(const uint8_t* buf, size_t len, size_t cursor, char* out, size_t outCap);
 ssize_t parse_header(const uint8_t *buf, size_t len, dns_header *out);
 ssize_t parse_record(const uint8_t* buf, size_t len, size_t cursor, dns_record* out);
-ssize_t parse_records(const uint8_t* buf, size_t len, size_t cursor, dns_record* out);
+int parse_records(const uint8_t* buf, size_t len, size_t cursor, dns_ns* out, int outLen, int recordAmt);
 
 
 #endif

@@ -303,6 +303,41 @@ ssize_t parse_record(const uint8_t* buf, size_t len, size_t cursor, dns_record* 
 	return (ssize_t)localCursor;
 }
 
-ssize_t parse_records(const uint8_t* buf, size_t len, size_t cursor, dns_record* out){
+int parse_records(const uint8_t* buf, size_t len, size_t cursor, dns_ns* out, int outLen, int recordAmt){
+	int count = 0;
+	int index = 0;
 
+	memset(out, 0, sizeof(dns_ns) * outLen);
+
+	ssize_t localCursor = (ssize_t) cursor;
+	dns_record localRecord;
+
+	while(index < recordAmt){
+		localCursor = parse_record(buf, len, (size_t)localCursor, &localRecord);
+		
+		if(localCursor < 0) break;
+
+		switch(localRecord.type){
+			case 1: //A
+				for(int i = 0; i < count; i++){
+					if(strcmp(out[i].name,localRecord.name) == 0){
+						//decode_name(buf, len, localRecord.rDataOffset, out[i].addr, sizeof(out[i].addr));
+						if(inet_ntop(AF_INET, buf + localRecord.rDataOffset, out[i].addr, sizeof(out[i].addr)) == NULL) break;
+					}
+				}
+				break;
+			case 2: //NS
+				if(count >= outLen) break; // still need to write the a's.
+				if(decode_name(buf, len, localRecord.rDataOffset, out[count].name, sizeof(out[count].name)) < 0)break;
+				count++;
+				break;
+			default:
+				break;
+		}
+
+		index++;
+	}
+
+
+	return count;
 }
